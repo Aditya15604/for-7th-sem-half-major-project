@@ -1,0 +1,40 @@
+digraph cyber_triage_flow {
+	fontname=Arial fontsize=12 nodesep=0.5 rankdir=TB ranksep=0.8
+	user [label=User color="#4e79a7" fontcolor=white shape=circle style=filled]
+	interface [label=Interface color="#f28e2b" fontcolor=white shape=box style=filled]
+	mode [label="Choose Mode" color="#e15759" fontcolor=white shape=diamond style=filled]
+	web [label="Flask Web App
+(Web Interface)" color="#76b7b2" fontcolor=white shape=box style=filled]
+	cli [label="Main CLI" color="#59a14f" fontcolor=white shape=box style=filled]
+	engine [label="Triage Engine" color="#edc948" fontcolor=black shape=box style=filled]
+	collector [label="File Collector" color="#b07aa1" fontcolor=white shape=box style=filled]
+	analyzers [label=Analyzers color="#ff9da7" fontcolor=black shape=box style=filled]
+	entropy [label="Entropy Analyzer" color="#9c755f" fontcolor=white shape=box style=filled]
+	pe [label="PE File Analyzer" color="#f1ce63" fontcolor=black shape=box style=filled]
+	yara [label="YARA Analyzer" color="#499894" fontcolor=white shape=box style=filled]
+	report [label="Report Writer" color="#86bcb6" fontcolor=black shape=box style=filled]
+	json [label="JSON Report" color="#b07aa1" fontcolor=white shape=box style=filled]
+	html [label="HTML Report" color="#76b7b2" fontcolor=white shape=box style=filled]
+	end [label=User color="#4e79a7" fontcolor=white shape=circle style=filled]
+	user -> interface [label=starts]
+	interface -> mode
+	mode -> web [label="Web Interface"]
+	mode -> cli [label=CLI]
+	web -> engine [label="API Calls"]
+	cli -> engine [label=Commands]
+	engine -> collector [label="Collect System Data"]
+	collector -> analyzers [label=Files]
+	analyzers -> entropy
+	analyzers -> pe
+	analyzers -> yara
+	entropy -> report
+	pe -> report
+	yara -> report
+	report -> json
+	report -> html
+	json -> end
+	html -> end
+	label="Cyber Triage Tool - System Flow"
+	labelloc=t
+	fontname="Arial Bold" fontsize=16
+}

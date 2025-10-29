@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report: {{ case_id }} | Cyber Triage Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .report-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        .metric-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            transition: transform 0.3s;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .threat-badge {
+            font-size: 1.2rem;
+            padding: 10px 20px;
+        }
+        .file-row-suspicious {
+            background-color: #fff3cd;
+        }
+        .file-row-dangerous {
+            background-color: #f8d7da;
+        }
+        .ai-insight {
+            border-left: 4px solid #667eea;
+            background-color: #f0f4ff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+    
+    <div class="container mt-4">
+        <!-- Report Header -->
+        <div class="report-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1><i class="bi bi-file-earmark-text"></i> {{ case_id }}</h1>
+                    <p class="lead mb-0">
+                        <i class="bi bi-geo-alt"></i> Target: {{ summary.target }}<br>
+                        <i class="bi bi-clock"></i> Generated: {{ summary.generated_at }}
+                    </p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-light btn-lg" onclick="window.print()">
+                        <i class="bi bi-printer"></i> Print Report
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AI-Powered Insights -->
+        <div class="card metric-card">
+            <div class="card-body">
+                <h4><i class="bi bi-lightbulb text-warning"></i> AI-Powered Insights</h4>
+                <div class="ai-insight" id="aiInsights">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                        <span class="visually-hidden">Analyzing...</span>
+                    </div>
+                    <span class="ms-2">Analyzing findings with AI...</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Metrics Row -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card metric-card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-files" style="font-size: 2.5rem;"></i>
+                        <h2 class="mt-2" id="totalFiles">{{ summary.count }}</h2>
+                        <p class="mb-0">Total Files</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-warning text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-exclamation-triangle" style="font-size: 2.5rem;"></i>
+                        <h2 class="mt-2" id="highEntropyCount">0</h2>
+                        <p class="mb-0">High Entropy</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-info text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-file-binary" style="font-size: 2.5rem;"></i>
+                        <h2 class="mt-2" id="executablesCount">0</h2>
+                        <p class="mb-0">Executables</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card bg-danger text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-bug-fill" style="font-size: 2.5rem;"></i>
+                        <h2 class="mt-2" id="yaraMatchesCount">0</h2>
+                        <p class="mb-0">YARA Matches</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Charts Row -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5><i class="bi bi-pie-chart"></i> Findings Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="findingsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h5><i class="bi bi-bar-chart"></i> Entropy Distribution</h5>
+                        <div class="chart-container">
+                            <canvas id="entropyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Detailed Findings Table -->
+        <div class="card metric-card mt-4">
+            <div class="card-header bg-dark text-white">
+                <h4 class="mb-0"><i class="bi bi-table"></i> Detailed Findings</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="findingsTable">
+                        <thead>
+                            <tr>
+                                <th>File Path</th>
+                                <th>SHA256</th>
+                                <th>Entropy</th>
+                                <th>Flags</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="findingsTableBody">
+                            <tr>
+                                <td colspan="5" class="text-center">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Threat Intel Modal -->
+    <div class="modal fade" id="threatIntelModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Threat Intelligence</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="threatIntelContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading threat intelligence...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const caseId = '{{ case_id }}';
+        let reportData = null;
+        
+        // Load report data
+        async function loadReport() {
+            try {
+                const response = await fetch(`/api/report/${caseId}`);
+                reportData = await response.json();
+                
+                const items = reportData.items || [];
+                
+                // Update metrics
+                const highEntropy = items.filter(i => i.flags.includes('high_entropy')).length;
+                const executables = items.filter(i => i.flags.includes('executable')).length;
+                const yaraMatches = items.filter(i => i.flags.includes('yara_match')).length;
+                
+                document.getElementById('highEntropyCount').textContent = highEntropy;
+                document.getElementById('executablesCount').textContent = executables;
+                document.getElementById('yaraMatchesCount').textContent = yaraMatches;
+                
+                // Generate AI insights
+                generateAIInsights(items, highEntropy, executables, yaraMatches);
+                
+                // Populate table
+                populateTable(items);
+                
+                // Create charts
+                createCharts(items, highEntropy, executables, yaraMatches);
+                
+            } catch (error) {
+                console.error('Error loading report:', error);
+            }
+        }
+        
+        function generateAIInsights(items, highEntropy, executables, yaraMatches) {
+            const insights = [];
+            const totalFiles = items.length;
+            
+            // Risk assessment
+            let riskLevel = 'Low';
+            let riskClass = 'success';
+            if (yaraMatches > 0 || highEntropy > totalFiles * 0.5) {
+                riskLevel = 'High';
+                riskClass = 'danger';
+            } else if (highEntropy > totalFiles * 0.3 || executables > 10) {
+                riskLevel = 'Medium';
+                riskClass = 'warning';
+            }
+            
+            insights.push(`<strong>Overall Risk Level:</strong> <span class="badge bg-${riskClass}">${riskLevel}</span>`);
+            
+            if (yaraMatches > 0) {
+                insights.push(`⚠️ <strong>Critical:</strong> ${yaraMatches} file(s) matched YARA malware signatures. Immediate investigation required.`);
+            }
+            
+            if (highEntropy > 0) {
+                const percentage = ((highEntropy / totalFiles) * 100).toFixed(1);
+                insights.push(`🔍 <strong>Analysis:</strong> ${percentage}% of files show high entropy, indicating possible encryption, compression, or obfuscation.`);
+            }
+            
+            if (executables > 0) {
+                insights.push(`💻 <strong>Executables Found:</strong> ${executables} PE files detected. Verify legitimacy of all executables.`);
+            }
+            
+            if (items.length === 0) {
+                insights.push(`ℹ️ <strong>No files analyzed.</strong> The target directory may be empty or inaccessible.`);
+            } else if (riskLevel === 'Low') {
+                insights.push(`✅ <strong>Good News:</strong> No immediate threats detected. Continue monitoring for anomalies.`);
+            }
+            
+            // Recommendations
+            insights.push(`<br><strong>Recommendations:</strong>`);
+            if (yaraMatches > 0) {
+                insights.push(`• Quarantine files with YARA matches immediately`);
+                insights.push(`• Run full system antivirus scan`);
+            }
+            if (highEntropy > totalFiles * 0.3) {
+                insights.push(`• Investigate high-entropy files for potential malware`);
+                insights.push(`• Check for unauthorized encryption`);
+            }
+            insights.push(`• Review all executables for legitimacy`);
+            insights.push(`• Enable real-time monitoring`);
+            
+            document.getElementById('aiInsights').innerHTML = insights.join('<br>');
+        }
+        
+        function populateTable(items) {
+            const tbody = document.getElementById('findingsTableBody');
+            tbody.innerHTML = '';
+            
+            items.forEach((item, index) => {
+                const row = document.createElement('tr');
+                
+                // Determine row class based on threat level
+                let rowClass = '';
+                if (item.flags.includes('yara_match')) {
+                    rowClass = 'file-row-dangerous';
+                } else if (item.flags.includes('high_entropy')) {
+                    rowClass = 'file-row-suspicious';
+                }
+                row.className = rowClass;
+                
+                const hash = item.hashes?.sha256 || 'N/A';
+                const shortHash = hash.substring(0, 16) + '...';
+                
+                row.innerHTML = `
+                    <td><small>${item.path}</small></td>
+                    <td><code>${shortHash}</code></td>
+                    <td>${item.entropy || 'N/A'}</td>
+                    <td>${item.flags.map(f => `<span class="badge bg-secondary">${f}</span>`).join(' ')}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="showThreatIntel('${hash}')">
+                            <i class="bi bi-search"></i> Intel
+                        </button>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+        
+        function createCharts(items, highEntropy, executables, yaraMatches) {
+            // Findings pie chart
+            new Chart(document.getElementById('findingsChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['High Entropy', 'Executables', 'YARA Matches', 'Clean'],
+                    datasets: [{
+                        data: [
+                            highEntropy,
+                            executables,
+                            yaraMatches,
+                            items.length - highEntropy - executables - yaraMatches
+                        ],
+                        backgroundColor: ['#ffc107', '#17a2b8', '#dc3545', '#28a745']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {position: 'bottom'}
+                    }
+                }
+            });
+            
+            // Entropy histogram
+            const entropyBuckets = [0, 0, 0, 0, 0]; // 0-2, 2-4, 4-6, 6-8, 8+
+            items.forEach(item => {
+                const entropy = item.entropy || 0;
+                if (entropy < 2) entropyBuckets[0]++;
+                else if (entropy < 4) entropyBuckets[1]++;
+                else if (entropy < 6) entropyBuckets[2]++;
+                else if (entropy < 8) entropyBuckets[3]++;
+                else entropyBuckets[4]++;
+            });
+            
+            new Chart(document.getElementById('entropyChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['0-2', '2-4', '4-6', '6-8', '8+'],
+                    datasets: [{
+                        label: 'File Count',
+                        data: entropyBuckets,
+                        backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {display: false}
+                    },
+                    scales: {
+                        y: {beginAtZero: true}
+                    }
+                }
+            });
+        }
+        
+        async function showThreatIntel(hash) {
+            const modal = new bootstrap.Modal(document.getElementById('threatIntelModal'));
+            modal.show();
+            
+            try {
+                const response = await fetch(`/api/threat-intel/${hash}`);
+                const data = await response.json();
+                
+                document.getElementById('threatIntelContent').innerHTML = `
+                    <h5>File Hash: <code>${data.hash}</code></h5>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Threat Level:</strong> <span class="badge bg-${data.threat_level === 'high' ? 'danger' : 'warning'}">${data.threat_level}</span></p>
+                            <p><strong>Detections:</strong> ${data.detections} / ${data.total_scans}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>First Seen:</strong> ${data.first_seen}</p>
+                            <p><strong>Last Seen:</strong> ${data.last_seen}</p>
+                        </div>
+                    </div>
+                    <p><strong>Tags:</strong> ${data.tags.map(t => `<span class="badge bg-info">${t}</span>`).join(' ')}</p>
+                    <div class="alert alert-info">
+                        <strong>Recommendation:</strong> ${data.recommendation}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('threatIntelContent').innerHTML = `
+                    <div class="alert alert-danger">Error loading threat intelligence</div>
+                `;
+            }
+        }
+        
+        // Load report on page load
+        loadReport();
+    </script>
+</body>
+</html>

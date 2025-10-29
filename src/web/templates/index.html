@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Dashboard | Cyber Triage Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
+    <style>
+        body {
+            background: linear-gradient(135deg, #808cc4ff 0%, #f9f8f9ff 100%);
+            min-height: 100vh;
+        }
+        .dashboard-container {
+            padding: 30px 0;
+        }
+        .stat-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+            margin-bottom: 20px;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        .stat-icon {
+            font-size: 3rem;
+            opacity: 0.8;
+        }
+        .hero-section {
+            background: black;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .case-card {
+            border: none;
+            border-radius: 15px;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        .case-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        .badge-threat {
+            font-size: 0.9rem;
+            padding: 5px 15px;
+        }
+    </style>
+</head>
+<body>
+    {% include 'navbar.html' %}
+    
+    <div class="container dashboard-container">
+        <!-- Hero Section -->
+        <div class="hero-section text-center">
+            <h1 class="display-4"><i class="bi bi-shield-check text-primary"></i> Cyber Triage Dashboard</h1>
+            <p class="lead">Intelligent automated security analysis and incident response</p>
+            <a href="/scan" class="btn btn-primary btn-lg mt-3">
+                <i class="bi bi-plus-circle"></i> New Scan
+            </a>
+        </div>
+        
+        <!-- Statistics Cards -->
+        <div class="row mb-4" id="statsCards">
+            <div class="col-md-3">
+                <div class="card stat-card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-folder stat-icon"></i>
+                        <h3 class="mt-2" id="totalCases">-</h3>
+                        <p class="mb-0">Total Cases</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-success text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-file-earmark stat-icon"></i>
+                        <h3 class="mt-2" id="totalFiles">-</h3>
+                        <p class="mb-0">Files Analyzed</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-warning text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-exclamation-triangle stat-icon"></i>
+                        <h3 class="mt-2" id="highEntropyFiles">-</h3>
+                        <p class="mb-0">High Entropy</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-danger text-white">
+                    <div class="card-body text-center">
+                        <i class="bi bi-bug stat-icon"></i>
+                        <h3 class="mt-2" id="yaraMatches">-</h3>
+                        <p class="mb-0">YARA Matches</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Cases -->
+        <div class="card shadow-lg" style="border-radius: 20px;">
+            <div class="card-header bg-dark text-white">
+                <h4><i class="bi bi-clock-history"></i> Recent Investigation Cases</h4>
+            </div>
+            <div class="card-body">
+                <div class="row" id="casesList">
+                    <div class="col-12 text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading cases...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        console.log('Dashboard script loaded - Version 2.0 with delete buttons');
+        
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                document.getElementById('totalCases').textContent = data.total_cases || 0;
+                document.getElementById('totalFiles').textContent = data.total_files || 0;
+                document.getElementById('highEntropyFiles').textContent = data.high_entropy_files || 0;
+                document.getElementById('yaraMatches').textContent = data.yara_matches || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load cases
+        async function loadCases() {
+            try {
+                const response = await fetch('/api/cases');
+                const data = await response.json();
+                const casesList = document.getElementById('casesList');
+                
+                if (data.cases && data.cases.length > 0) {
+                    casesList.innerHTML = '';
+                    console.log('Loading cases with delete buttons...', data.cases.length);
+                    data.cases.forEach(caseItem => {
+                        const threatLevel = getThreatLevel(caseItem.count);
+                        const col = document.createElement('div');
+                        col.className = 'col-md-4';
+                        col.innerHTML = `
+                            <div class="card case-card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <h5 class="card-title">
+                                            <i class="bi bi-folder-fill text-primary"></i> ${caseItem.id}
+                                        </h5>
+                                        <span class="badge ${threatLevel.class} badge-threat">${threatLevel.text}</span>
+                                    </div>
+                                    <p class="card-text text-muted">
+                                        <i class="bi bi-geo-alt"></i> ${truncate(caseItem.target, 40)}<br>
+                                        <i class="bi bi-file-earmark"></i> ${caseItem.count} files<br>
+                                        <i class="bi bi-clock"></i> ${formatDate(caseItem.generated_at)}
+                                    </p>
+                                    <div class="d-grid gap-2">
+                                        <a href="/report/${caseItem.id}" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-eye"></i> View Report
+                                        </a>
+                                        <button class="btn btn-danger btn-sm" onclick="deleteCase('${caseItem.id}'); return false;">
+                                            <i class="bi bi-trash"></i> Delete Report
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        casesList.appendChild(col);
+                    });
+                } else {
+                    casesList.innerHTML = `
+                        <div class="col-12 text-center">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> No cases found. Start a new scan to begin!
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading cases:', error);
+                document.getElementById('casesList').innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger">Error loading cases</div>
+                    </div>
+                `;
+            }
+        }
+        
+        function getThreatLevel(fileCount) {
+            if (fileCount > 100) return {text: 'High', class: 'bg-danger'};
+            if (fileCount > 50) return {text: 'Medium', class: 'bg-warning'};
+            return {text: 'Low', class: 'bg-success'};
+        }
+        
+        function truncate(str, len) {
+            return str.length > len ? str.substring(0, len) + '...' : str;
+        }
+        
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Unknown';
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        }
+        
+        // Delete case function
+        async function deleteCase(caseId) {
+            if (!confirm(`Are you sure you want to delete case ${caseId}?\n\nThis action cannot be undone!`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/case/${caseId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`Case ${caseId} deleted successfully!`);
+                    // Reload cases and stats
+                    loadStats();
+                    loadCases();
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error deleting case:', error);
+                alert('Failed to delete case');
+            }
+        }
+        
+        // Load data on page load
+        loadStats();
+        loadCases();
+        
+        // Refresh every 30 seconds
+        setInterval(() => {
+            loadStats();
+            loadCases();
+        }, 30000);
+    </script>
+</body>
+</html>
